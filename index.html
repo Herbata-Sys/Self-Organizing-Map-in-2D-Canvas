@@ -1,0 +1,372 @@
+<html>
+  <head>
+    <title>Self Organizing Map</title>
+    <meta charset="UTF-8">
+    <script src="siec/neuron.js"></script>
+    <script src="siec/map.js"></script>
+  </head>
+  <body>
+    <div class="container1">
+      <input type="file" class="file1" style="display: none;" onChange="fileSelect('1')" accept="image/*">
+      <input type="file" class="file2" style="display: none;" onChange="fileSelect('2')" accept="image/*">
+      <div class='c1'>
+        <canvas id="myCanvas1" width="250" height="250" style="border:1px solid #000000;" onClick="fileClick('1')"></canvas> <br>
+        Obrazek 1
+      </div>
+      <div class='c2'>
+        <canvas id="myCanvas2" width="250" height="250" style="border:2px solid gray;" onClick="toggleLearn()" ondblclick="changeFigure()"></canvas> <br>
+        Wynik
+      </div>
+      <div class='c3'>
+        <canvas id="myCanvas3" width="250" height="250" style="border:1px solid #000000;" onClick="fileClick('2')"></canvas> <br>
+        Obrazek 2
+      </div>
+    </div>
+    <div class="container2">
+      <br>
+      Sąsiedztwo początkowe:
+      <div class="value"></div>
+      <input type="range" min="1" max="100" value="3" step="1" class="range1" oninput="changeValue()" onchange="newMap()"><br>
+      Współczynnik uczenia początkowy:
+      <div class="value"></div>
+      <input type="range" min="0.0001" max="1" value="0.0007" step="0.0001" class="range2" oninput="changeValue()" onchange="newMap()"><br>
+      Hiperparametr uczenia:
+      <div class="value"></div>
+      <input type="range" min="0" max="1000" value="200" step="10" class="range3" oninput="changeValue()" onchange="newMap()"><br>
+      Hiperparametr sąsiedztwa:
+      <div class="value"></div>
+      <input type="range" min="0" max="1000" value="60" step="10" class="range4" oninput="changeValue()" onchange="newMap()"><br>
+      1. wymiar siatki:
+      <div class="value"></div>
+      <input type="range" min="1" max="100" value="50" step="1" class="range5" oninput="changeValue()" onchange="newMap()"><br>
+      2. wymiar siatki:
+      <div class="value"></div>
+      <input type="range" min="1" max="5" value="1" step="1" class="range6" oninput="changeValue()" onchange="newMap()"><br>
+    </div>
+  </body>
+</html>
+
+<script>
+let imageArray = [[], []];
+const image = [new Image(), new Image()];
+const canvas = [document.querySelector('#myCanvas1'), document.querySelector('#myCanvas2'), document.querySelector('#myCanvas3')];
+const ctx = [canvas[0].getContext('2d'), canvas[1].getContext('2d'), canvas[2].getContext('2d')]
+image[0].addEventListener('load', ImageLoad.bind(null, 0, image[0], ctx[0], canvas[0]));
+image[1].addEventListener('load', ImageLoad.bind(null, 1, image[1], ctx[2], canvas[2]));
+let map = null;
+
+function ImageLoad(imageIndex, imageP, ctxP, canvasP) {
+  if (actualPic == imageIndex){
+    map.t = 0;
+    t=0;
+  }
+  imageArray[imageIndex] = [];
+  ctxP.drawImage(imageP, 0, 0, 250, 250);
+  imageToArray(canvasP, ctxP, imageArray[imageIndex]);
+  if (learn) stopLearn();
+  if (!learn) startLearn(t);
+}
+
+function imageToArray(canvas, ctxM, imageArray) {
+  for(let y=0; y<canvas.clientHeight; y++) { //iteruje po wysokości obrazu
+    for(let x=0; x<canvas.clientWidth; x++) { //iteruje po szerokości obrazu
+      const rgb = ctxM.getImageData(x, y, 1, 1).data; //zapisuje kolor piksela do zmiennej
+      if (rgb[0] == '0' && rgb[1] == '0' && rgb[2] == '0') //sprawdza czy piksel jest czarny
+        imageArray.push([x, y]); //dodaje współrzędne czarnego piksela do tablicy
+    }
+  }
+}
+
+function drawRect(x, y, color) {
+  ctx[1].beginPath();
+  ctx[1].fillStyle = color;
+  ctx[1].fillRect(x-2, y-2, 4, 4);
+  ctx[1].stroke();
+}
+
+function drawLine(x1, y1, x2, y2, color) {
+  ctx[1].beginPath();
+  ctx[1].strokeStyle = color;
+  ctx[1].moveTo(x1, y1);
+  ctx[1].lineTo(x2, y2);
+  ctx[1].stroke();
+}
+
+function clearCanvas() {
+  ctx[1].save();
+  ctx[1].setTransform(1, 0, 0, 1, 0, 0);
+  ctx[1].clearRect(0, 0, canvas[1].width, canvas[1].height);
+  ctx[1].restore();
+}
+
+function drawMap() {
+  map.neurons.forEach((neuronFirst, i) => {
+    neuronFirst.forEach((neuron, j) => {
+      drawRect(neuron.weights[0], neuron.weights[1], `rgb(255,0,0)`);
+      // console.log(map)
+      let previous = 0;
+      if(map.neurons[0].length == 1) {
+        previous = i == 0 ? map.neurons[map.neurons.length-1][0] : map.neurons[i-1][0];
+        drawLine(neuron.weights[0], neuron.weights[1], previous.weights[0], previous.weights[1], `rgb(0,0,0)`);
+      }
+      else {
+        if(i>0) {
+          previous = map.neurons[i-1][j];
+          drawLine(neuron.weights[0], neuron.weights[1], previous.weights[0], previous.weights[1], `rgb(0,0,0)`);
+        }
+        if(j>0) {
+          previous = map.neurons[i][j-1];
+          drawLine(neuron.weights[0], neuron.weights[1], previous.weights[0], previous.weights[1], `rgb(0,0,0)`);
+        }
+      }
+    });
+  });
+}
+
+function draw(picture) {
+  clearCanvas();
+  ctx[1].globalAlpha = 0.4;
+  ctx[1].drawImage(picture, 0, 0, 250, 250);
+  ctx[1].globalAlpha = 1;
+  drawMap();
+}
+
+let x = 0;
+let interval = '';
+let learn = 0;
+let actualPic = 0;
+
+function startLearn(xt=0) {
+  learn = 1;
+  canvas[1].style.border = '2px solid #0089ff';
+  const array = !x ? imageArray[0] : imageArray[1];
+  const picture = !x ? image[0] : image[1];
+  actualPic = !x ? 0 : 1;
+  map.t = xt;
+
+  interval = setInterval(function() {
+    map.learnIteration(array);
+    draw(picture);
+    if (Math.abs(map.change) < 40 || map.t > 100) {
+      clearInterval(interval);
+      startLearn();
+    };
+  }, 50, array);
+  x = !x;
+}
+
+let t = 0;
+function stopLearn() {
+  t = map.t;
+  learn = 0;
+  clearInterval(interval);
+  canvas[1].style.border = '2px solid red';
+  x = !x;
+}
+
+function toggleLearn() {
+  if (learn) stopLearn();
+  else startLearn(t);
+}
+
+function changeFigure() {
+  stopLearn();
+  x = !x;
+  startLearn();
+}
+
+function fileClick(z) {
+  if (z == '1') document.querySelector('.file1').click();
+  else document.querySelector('.file2').click();
+}
+
+function fileSelect(z) {
+  if (z == '1') {
+    let input = document.querySelector('.file1');
+    let file = input.files[0];
+    let reader = new FileReader();
+    if (file) {
+      reader.readAsDataURL(file);
+      reader.addEventListener("load", function () {
+        image[0].src = reader.result;
+      }, false);
+    }
+  }
+  else {
+    let input = document.querySelector('.file2');
+    let file = input.files[0];
+    let reader = new FileReader();
+    if (file) {
+      reader.readAsDataURL(file);
+      reader.addEventListener("load", function () {
+        image[1].src = reader.result;
+      }, false);
+    }
+  }
+}
+
+function updateValues() {
+  document.querySelectorAll('.value').forEach(element => {
+    element.innerHTML = element.nextElementSibling.value;
+  });
+}
+
+function changeValue() {
+  updateValues();
+}
+
+function newMap() {
+  const sigma0 = document.querySelectorAll('input[type=range]')[0].value;
+  const eta0 = document.querySelectorAll('input[type=range]')[1].value;
+  const alpha = document.querySelectorAll('input[type=range]')[2].value;
+  const alpha1 = document.querySelectorAll('input[type=range]')[3].value;
+  const d1 = document.querySelectorAll('input[type=range]')[4].value;
+  const d2 = document.querySelectorAll('input[type=range]')[5].value;
+  map = new Map(249, 249, d1, d2, sigma0, eta0, alpha, alpha1)
+}
+
+document.body.addEventListener('keydown', (e) => {
+  if (e.key === ' ') {
+    e.stopPropagation();
+    e.preventDefault();
+    toggleLearn();
+  }
+});
+
+newMap();
+updateValues();
+</script>
+
+<style>
+*{
+  box-sizing: border-box;
+  user-select: none;
+}
+
+body{
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+}
+
+.container1{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+input{
+  padding: 5px 10px;
+  font-size: 20px;
+}
+
+canvas{
+  cursor: pointer;
+}
+
+.c1, .c2, .c3{
+  margin: 0 10px;
+  display: inline-block;
+}
+
+.value{
+  display: inline-block;
+  font-weight: bold;
+}
+
+
+/* suwaki */
+input[type=range]{
+  display: block;
+  margin: auto;
+  width: 100%;
+  max-width: 400px;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 100%;
+  margin: auto;
+}
+input[type=range]:focus {
+  outline: none;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 15.2px;
+  cursor: pointer;
+  box-shadow: 0px 0px 1px #000000, 0px 0px 0px #0d0d0d;
+  background: rgba(31, 31, 31, 0.92);
+  border-radius: 0px;
+  border: 0px solid #010101;
+}
+input[type=range]::-webkit-slider-thumb {
+  box-shadow: 0px 0px 1px #743400, 0px 0px 0px #8e3f00;
+  border: 0px solid #ff8d00;
+  height: 20px;
+  width: 10px;
+  border-radius: 0px;
+  background: #95b3f7;
+  cursor: pointer;
+  -webkit-appearance: none;
+  margin-top: -2.4px;
+}
+input[type=range]:focus::-webkit-slider-runnable-track {
+  background: rgba(69, 69, 69, 0.92);
+}
+input[type=range]::-moz-range-track {
+  width: 100%;
+  height: 15.2px;
+  cursor: pointer;
+  box-shadow: 0px 0px 1px #000000, 0px 0px 0px #0d0d0d;
+  background: rgba(31, 31, 31, 0.92);
+  border-radius: 0px;
+  border: 0px solid #010101;
+}
+input[type=range]::-moz-range-thumb {
+  box-shadow: 0px 0px 1px #743400, 0px 0px 0px #8e3f00;
+  border: 0px solid #ff8d00;
+  height: 20px;
+  width: 10px;
+  border-radius: 0px;
+  background: #95b3f7;
+  cursor: pointer;
+}
+input[type=range]::-ms-track {
+  width: 100%;
+  height: 15.2px;
+  cursor: pointer;
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+input[type=range]::-ms-fill-lower {
+  background: rgba(0, 0, 0, 0.92);
+  border: 0px solid #010101;
+  border-radius: 0px;
+  box-shadow: 0px 0px 1px #000000, 0px 0px 0px #0d0d0d;
+}
+input[type=range]::-ms-fill-upper {
+  background: rgba(31, 31, 31, 0.92);
+  border: 0px solid #010101;
+  border-radius: 0px;
+  box-shadow: 0px 0px 1px #000000, 0px 0px 0px #0d0d0d;
+}
+input[type=range]::-ms-thumb {
+  box-shadow: 0px 0px 1px #743400, 0px 0px 0px #8e3f00;
+  border: 0px solid #ff8d00;
+  height: 20px;
+  width: 10px;
+  border-radius: 0px;
+  background: #95b3f7;
+  cursor: pointer;
+  height: 15.2px;
+}
+input[type=range]:focus::-ms-fill-lower {
+  background: rgba(31, 31, 31, 0.92);
+}
+input[type=range]:focus::-ms-fill-upper {
+  background: rgba(69, 69, 69, 0.92);
+}
+</style>
